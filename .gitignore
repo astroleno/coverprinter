@@ -1,1 +1,23 @@
-node_modules
+# Node.js
+node_modules/
+
+# Next.js
+.next/
+
+# 日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 本地环境
+.env*
+.DS_Store
+*.local
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 其他
+styles_test.json
