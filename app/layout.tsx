@@ -1,4 +1,7 @@
 import MuiThemeProvider from './theme-provider';
+import './globals.css'; // 引入全局样式
+import React from 'react';
+import BreathBg from './BreathBg'; // 新增：引入客户端动画组件
 
 export const metadata = {
   title: 'Next.js',
@@ -12,10 +15,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <MuiThemeProvider>
-          {children}
-        </MuiThemeProvider>
+      <body style={{ position: 'relative', minHeight: '100vh', '--breath-speed': '8s' } as any}>
+        {/* 多弥散圆动态背景层，4个圆，最后一个跟随鼠标 */}
+        <BreathBg />
+        {/* 主内容 */}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <MuiThemeProvider>
+            {children}
+          </MuiThemeProvider>
+        </div>
       </body>
     </html>
   )

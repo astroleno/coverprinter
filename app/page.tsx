@@ -19,6 +19,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import axios from "axios";
+import BreathBg from './BreathBg';
 let html2canvas: any = null;
 
 // 解析风格文件第一行作为label
@@ -33,7 +34,7 @@ interface StyleItem {
   content: string;
 }
 
-// 候选模型列表，可根据实际需求扩展
+// 候选模型列表，新增 gemini-2.5-pro，且自定义只保留一个
 const modelOptions = [
   { value: "claude-3-7-sonnet-20250219", label: "claude-3-7-sonnet-20250219" },
   { value: "claude-opus-4-20250514", label: "claude-opus-4-20250514" },
@@ -43,6 +44,14 @@ const modelOptions = [
   { value: "deepseek-r1", label: "deepseek-r1" },
   { value: "qwen-max-latest", label: "qwen-max-latest" },
   { value: "gemini-2.5-pro", label: "gemini-2.5-pro" },
+  { value: "custom", label: "自定义..." }, // 只保留一个自定义
+];
+
+// 新增：API转发代理URL下拉框选项
+const proxyUrlOptions = [
+  { value: "https://www.dmxapi.com/v1/chat/completions", label: "https://www.dmxapi.com/v1/chat/completions" },
+  { value: "https://yunwu.ai/v1/chat/completions", label: "https://yunwu.ai/v1/chat/completions" },
+  { value: "https://api.xi-ai.cn/v1/chat/completions", label: "https://api.xi-ai.cn/v1/chat/completions" },
   { value: "custom", label: "自定义..." },
 ];
 
@@ -50,6 +59,8 @@ const modelOptions = [
 export default function Home() {
   // API转发代理和API Key
   const [proxyUrl, setProxyUrl] = useState("https://www.dmxapi.com/v1/chat/completions");
+  const [isCustomProxyUrl, setIsCustomProxyUrl] = useState(false); // 新增：是否自定义API URL
+  const [customProxyUrl, setCustomProxyUrl] = useState(""); // 新增：自定义API URL
   const [apiKey, setApiKey] = useState("");
   // 模型名称相关
   const [model, setModel] = useState("claude-opus-4-20250514-thinking");
@@ -243,12 +254,37 @@ export default function Home() {
       html2canvas = (await import("html2canvas")).default;
     }
     if (previewRef.current) {
-      html2canvas(previewRef.current, { backgroundColor: null }).then((canvas: HTMLCanvasElement) => {
+      try {
+        // 配置html2canvas以正确捕获blur效果
+        const canvas = await html2canvas(previewRef.current, { 
+          backgroundColor: null,
+          allowTaint: true,
+          useCORS: true,
+          scale: 2, // 提高分辨率
+          logging: false,
+          // 确保CSS效果被正确渲染
+          onclone: (clonedDoc) => {
+            // 在克隆的文档中确保所有样式都被应用
+            const clonedElement = clonedDoc.querySelector('[data-preview]');
+            if (clonedElement) {
+              // 强制重新计算样式
+              clonedElement.getBoundingClientRect();
+            }
+          }
+        });
+        
         const link = document.createElement("a");
         link.download = "cover-preview.png";
-        link.href = canvas.toDataURL();
+        link.href = canvas.toDataURL("image/png", 1.0);
         link.click();
-      });
+        
+        showSnackbar("PNG下载成功！");
+      } catch (error) {
+        console.error('下载PNG失败:', error);
+        showSnackbar("下载失败：" + (error?.message || "未知错误"));
+      }
+    } else {
+      showSnackbar("请先生成封面内容");
     }
   };
 
@@ -276,7 +312,7 @@ export default function Home() {
     setLoading(true);
     setResult("");
     setHtmlPreview("");
-    setResultCollapsed(false); // 生成时展开结果
+    setResultCollapsed(false);
     try {
       const url = proxyUrl || "https://www.dmxapi.com/v1/chat/completions";
       const modelName = isCustomModel ? customModel : model;
@@ -284,7 +320,6 @@ export default function Home() {
         "Content-Type": "application/json"
       };
       if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
-      // DMXAPI流式参数为stream: true
       const body = JSON.stringify({
         model: modelName,
         messages: buildMessages(),
@@ -318,6 +353,22 @@ export default function Home() {
         }
       }
       setLoading(false);
+      // 生成完成后播放提示音
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'triangle';
+        o.frequency.value = 880; // 清脆
+        g.gain.value = 0.08; // 响度不大
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start();
+        o.stop(ctx.currentTime + 0.18);
+        o.onended = () => ctx.close();
+      } catch (e) {
+        // 忽略音频错误
+      }
     } catch (e: any) {
       if (e?.name === "TypeError") {
         showSnackbar("网络错误或CORS跨域问题，或API地址/Key错误");
@@ -409,148 +460,262 @@ export default function Home() {
   // 风格选择自定义项
   const customStyleItem = { name: "custom", content: "自定义..." };
 
+  // 1. 风格下拉框：未选择时自动选中第一个风格
+  useEffect(() => {
+    if (styleList.length > 0 && !style) {
+      setStyle(styleList[0].name);
+    }
+  }, [styleList]);
+
   return (
-    <Box sx={{ maxWidth: 800, mx: 'auto', my: 4 }}>
-      {/* API设置卡片 */}
-      <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>API设置</Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <TextField label="API转发代理URL（如 http://localhost:3000）" value={proxyUrl} onChange={(e) => setProxyUrl(e.target.value)} fullWidth size="small" />
-          <TextField label="API Key（部分API需填写）" value={apiKey} onChange={(e) => setApiKey(e.target.value)} fullWidth size="small" />
-          <FormControl fullWidth size="small">
-            <InputLabel>模型名称</InputLabel>
-            <Select value={isCustomModel ? "custom" : model} label="模型名称" onChange={(e) => handleModelChange(e.target.value)}>
-              {modelOptions.map(option => (
-                <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
-              ))}
-              <MenuItem value="custom"><em>自定义...</em></MenuItem>
-            </Select>
-          </FormControl>
-          {isCustomModel && (
-            <TextField label="自定义模型名称" value={customModel} onChange={(e) => { setCustomModel(e.target.value); setModel(e.target.value); }} fullWidth size="small" />
-          )}
-          <Box>
-            <Button variant="outlined" size="small" onClick={handleTestProxy} disabled={testLoading} sx={{ mr: 2, color: '#769164', borderColor: '#769164', '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' } }}>测试连通性</Button>
-            {testLoading && <CircularProgress size={18} sx={{ color: '#769164' }} />}
-          </Box>
-        </Box>
-        {testResult && (
-          <Paper sx={{ mt: 2, p: 2, background: testResult.success ? '#f8f9f8' : '#fef8f8', border: '1px solid', borderColor: testResult.success ? '#769164' : '#d32f2f' }}>
-            <Typography variant="subtitle1" color={testResult.success ? '#769164' : 'error.main'}>{testResult.msg}</Typography>
-            {testResult.detail && testResult.detail.length > 0 && (
-              <Box component="ul" sx={{ pl: 2, color: '#555', fontSize: 13 }}>
-                {testResult.detail.map((d, i) => <li key={i}>{d}</li>)}
-              </Box>
+    <>
+      {/* 背景动画，传递主题色 */}
+      <BreathBg />
+      <Box sx={{ maxWidth: 800, mx: 'auto', my: 4 }}>
+        {/* API设置卡片 */}
+        <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
+          <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>API设置</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* API转发代理URL下拉框 */}
+            <FormControl fullWidth size="small">
+              <InputLabel>API转发代理URL</InputLabel>
+              <Select
+                value={isCustomProxyUrl ? "custom" : proxyUrl}
+                label="API转发代理URL"
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === "custom") {
+                    setIsCustomProxyUrl(true);
+                    // 若已有自定义值则用已有，否则清空
+                    setProxyUrl(customProxyUrl || "");
+                  } else {
+                    setIsCustomProxyUrl(false);
+                    setProxyUrl(val);
+                  }
+                }}
+              >
+                {proxyUrlOptions.map(option => (
+                  <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {/* 选中自定义时显示输入框 */}
+            {isCustomProxyUrl && (
+              <TextField
+                label="自定义API转发代理URL"
+                value={proxyUrl}
+                onChange={e => {
+                  setProxyUrl(e.target.value);
+                  setCustomProxyUrl(e.target.value);
+                }}
+                fullWidth
+                size="small"
+                placeholder="请输入完整的API转发地址"
+              />
             )}
-          </Paper>
-        )}
-      </Paper>
-
-      {/* 封面提示词卡片 */}
-      <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>封面提示词</Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {/* 选择模板 */}
-          <FormControl fullWidth size="small">
-            <InputLabel>选择模板</InputLabel>
-            <Select value={prompt} label="选择模板" onChange={(e) => setPrompt(e.target.value)}>
-              {promptList.map(p => (
-                <MenuItem key={p.key} value={p.key}>{p.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {/* 选择风格 */}
-          <FormControl fullWidth size="small">
-            <InputLabel>选择风格</InputLabel>
-            <Select
-              value={style}
-              label="选择风格"
-              onChange={(e) => setStyle(e.target.value)}
-              disabled={styleList.length === 0}
-              displayEmpty
-            >
-              {styleList.length === 0 ? (
-                <MenuItem value="" disabled style={{ color: '#aaa' }}>
-                  无可用风格 (已加载 {styleList.length} 个风格)
-                </MenuItem>
-              ) : (
-                [...styleList, customStyleItem].map(s => (
-                  <MenuItem key={s.name} value={s.name}>{getStyleLabel(s.content, s.name)}</MenuItem>
-                ))
-              )}
-            </Select>
-          </FormControl>
-          {/* 自定义模板输入框 */}
-          {prompt === 'custom' && (
-            <TextField
-              label="自定义模板内容"
-              placeholder="请输入完整的提示词模板..."
-              value={promptTemplates.custom || ''}
-              onChange={e => setPromptTemplates(prev => ({ ...prev, custom: e.target.value }))}
-              fullWidth
-              multiline
-              minRows={4}
-              size="small"
-            />
-          )}
-          {/* 自定义风格输入框 */}
-          {style === 'custom' && (
-            <TextField
-              label="自定义风格内容"
-              placeholder="请输入完整的风格描述..."
-              value={customStyleItem.content !== '自定义...' ? customStyleItem.content : ''}
-              onChange={e => { customStyleItem.content = e.target.value; setStyleList(list => [...list]); }}
-              fullWidth
-              multiline
-              minRows={3}
-              size="small"
-            />
-          )}
-          {/* 普通输入项 */}
-          {prompt !== 'custom' && inputConfig[prompt]?.map(item => (
-            <TextField key={item.key} label={item.label} placeholder={item.placeholder} value={userInput[item.key] || ""} onChange={(e) => handleInputChange(item.key, e.target.value)} fullWidth size="small" />
-          ))}
-          <Button variant="contained" color="primary" onClick={handleGenerate} disabled={!style || (prompt !== 'custom' && inputConfig[prompt]?.some(i => !userInput[i.key])) || loading} sx={{ mt: 1, bgcolor: '#769164', '&:hover': { bgcolor: '#5a7a4a' } }}>
-            {loading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}生成
-          </Button>
-        </Box>
-      </Paper>
-
-      {/* 生成结果卡片 */}
-      <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="h5" sx={{ fontWeight: 600 }}>生成结果</Typography>
-          <IconButton size="small" onClick={() => setResultCollapsed(!resultCollapsed)} sx={{ color: '#769164' }}>
-            {resultCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
-          </IconButton>
-        </Box>
-        <Collapse in={!resultCollapsed} timeout="auto" unmountOnExit>
-          <Box sx={{ p: 2, background: '#fff' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <Typography variant="body2" sx={{ flex: 1, whiteSpace: 'pre-wrap', fontSize: 16 }}>{result}</Typography>
-              <IconButton size="small" onClick={() => {navigator.clipboard.writeText(result); showSnackbar('已复制');}} sx={{ color: '#769164' }}><ContentCopyIcon fontSize="small" /></IconButton>
+            {/* API Key输入框 */}
+            <TextField label="API Key（部分API需填写）" value={apiKey} onChange={(e) => setApiKey(e.target.value)} fullWidth size="small" />
+            {/* 模型名称下拉框 */}
+            <FormControl fullWidth size="small">
+              <InputLabel>模型名称</InputLabel>
+              <Select value={isCustomModel ? "custom" : model} label="模型名称" onChange={(e) => handleModelChange(e.target.value)}>
+                {modelOptions.map(option => (
+                  <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {/* 选中自定义模型时显示输入框 */}
+            {isCustomModel && (
+              <TextField label="自定义模型名称" value={customModel} onChange={(e) => { setCustomModel(e.target.value); setModel(e.target.value); }} fullWidth size="small" />
+            )}
+            <Box>
+              <Button variant="outlined" size="small" onClick={handleTestProxy} disabled={testLoading} sx={{ mr: 2, color: '#769164', borderColor: '#769164', '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' } }}>测试连通性</Button>
+              {testLoading && <CircularProgress size={18} sx={{ color: '#769164' }} />}
             </Box>
           </Box>
-        </Collapse>
-      </Paper>
-      
-      {/* 下载HTML代码按钮 - 独立放置 */}
-      {result && (
-        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
-          <Button 
-            variant="outlined" 
-            onClick={handleDownloadHtml} 
-            sx={{ 
-              color: '#769164', 
-              borderColor: '#769164', 
-              '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' } 
-            }}
-          >
-            下载HTML代码
-          </Button>
-        </Box>
-      )}
+          {testResult && (
+            <Paper sx={{ mt: 2, p: 2, background: testResult.success ? '#f8f9f8' : '#fef8f8', border: '1px solid', borderColor: testResult.success ? '#769164' : '#d32f2f' }}>
+              <Typography variant="subtitle1" color={testResult.success ? '#769164' : 'error.main'}>{testResult.msg}</Typography>
+              {testResult.detail && testResult.detail.length > 0 && (
+                <Box component="ul" sx={{ pl: 2, color: '#555', fontSize: 13 }}>
+                  {testResult.detail.map((d, i) => <li key={i}>{d}</li>)}
+                </Box>
+              )}
+            </Paper>
+          )}
+        </Paper>
+
+        {/* 封面提示词卡片 */}
+        <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
+          <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>封面提示词</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* 选择模板 */}
+            <FormControl fullWidth size="small">
+              <InputLabel>选择模板</InputLabel>
+              <Select value={prompt} label="选择模板" onChange={(e) => setPrompt(e.target.value)}>
+                {promptList.map(p => (
+                  <MenuItem key={p.key} value={p.key}>{p.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {/* 选择风格 */}
+            <FormControl fullWidth size="small">
+              <InputLabel>选择风格</InputLabel>
+              <Select
+                value={style}
+                label="选择风格"
+                onChange={(e) => setStyle(e.target.value)}
+                disabled={styleList.length === 0}
+                displayEmpty
+              >
+                {styleList.length === 0 ? (
+                  <MenuItem value="" disabled style={{ color: '#aaa' }}>
+                    无可用风格 (已加载 {styleList.length} 个风格)
+                  </MenuItem>
+                ) : (
+                  [...styleList, customStyleItem].map(s => (
+                    <MenuItem key={s.name} value={s.name}>{getStyleLabel(s.content, s.name)}</MenuItem>
+                  ))
+                )}
+              </Select>
+            </FormControl>
+            {/* 自定义模板输入框 */}
+            {prompt === 'custom' && (
+              <TextField
+                label="自定义模板内容"
+                placeholder="请输入完整的提示词模板..."
+                value={promptTemplates.custom || ''}
+                onChange={e => setPromptTemplates(prev => ({ ...prev, custom: e.target.value }))}
+                fullWidth
+                multiline
+                minRows={4}
+                size="small"
+              />
+            )}
+            {/* 自定义风格输入框 */}
+            {style === 'custom' && (
+              <TextField
+                label="自定义风格内容"
+                placeholder="请输入完整的风格描述..."
+                value={customStyleItem.content !== '自定义...' ? customStyleItem.content : ''}
+                onChange={e => { customStyleItem.content = e.target.value; setStyleList(list => [...list]); }}
+                fullWidth
+                multiline
+                minRows={3}
+                size="small"
+              />
+            )}
+            {/* 普通输入项 */}
+            {prompt !== 'custom' && inputConfig[prompt]?.map(item => (
+              <TextField key={item.key} label={item.label} placeholder={item.placeholder} value={userInput[item.key] || ""} onChange={(e) => handleInputChange(item.key, e.target.value)} fullWidth size="small" />
+            ))}
+            <Button
+              variant="contained"
+              onClick={handleGenerate}
+              disabled={
+                !style ||
+                (prompt !== 'custom' &&
+                  inputConfig[prompt]?.some(i => i.key !== 'slogan' && !userInput[i.key])
+                ) ||
+                loading
+              }
+              sx={{
+                mt: 1,
+                bgcolor: '#769164',
+                color: '#111',
+                fontWeight: 'bold',
+                '&:hover': { bgcolor: '#5a7a4a', filter: 'brightness(0.92)' },
+                boxShadow: '0 2px 8px rgba(0,0,0,0.12)'
+              }}
+            >
+              {loading ? <CircularProgress size={20} sx={{ mr: 1, color: '#111' }} /> : null}生成
+            </Button>
+          </Box>
+        </Paper>
+
+        {/* 生成结果卡片 */}
+        <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>生成结果</Typography>
+            <IconButton size="small" onClick={() => setResultCollapsed(!resultCollapsed)} sx={{ color: '#769164' }}>
+              {resultCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+            </IconButton>
+          </Box>
+          <Collapse in={!resultCollapsed} timeout="auto" unmountOnExit>
+            <Box sx={{ p: 2, background: '#fff' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Typography variant="body2" sx={{ flex: 1, whiteSpace: 'pre-wrap', fontSize: 16 }}>{result}</Typography>
+                <IconButton size="small" onClick={() => {navigator.clipboard.writeText(result); showSnackbar('已复制');}} sx={{ color: '#769164' }}><ContentCopyIcon fontSize="small" /></IconButton>
+              </Box>
+            </Box>
+          </Collapse>
+        </Paper>
+
+        {/* 预览卡片 */}
+        {htmlPreview && (
+          <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>封面预览</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* 预览容器 */}
+              <Box 
+                ref={previewRef}
+                data-preview="true"
+                className="preview-container"
+                sx={{ 
+                  minHeight: 200, 
+                  border: '1px solid #e0e0e0',
+                  borderRadius: 1,
+                  overflow: 'hidden'
+                }}
+                dangerouslySetInnerHTML={{ __html: htmlPreview }}
+              />
+              {/* 下载按钮组 */}
+              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                <Button 
+                  variant="outlined" 
+                  onClick={handleDownloadHtml} 
+                  sx={{ 
+                    color: '#769164', 
+                    borderColor: '#769164', 
+                    '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' } 
+                  }}
+                >
+                  下载HTML代码
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  onClick={handleDownloadPng} 
+                  sx={{ 
+                    color: '#769164', 
+                    borderColor: '#769164', 
+                    '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' } 
+                  }}
+                >
+                  下载PNG图片
+                </Button>
+              </Box>
+            </Box>
+          </Paper>
+        )}
+        
+        {/* 下载HTML代码按钮 - 独立放置 */}
+        {result && !htmlPreview && (
+          <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+            <Button 
+              variant="outlined" 
+              onClick={handleDownloadHtml} 
+              sx={{ 
+                color: '#769164', 
+                borderColor: '#769164', 
+                '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' } 
+              }}
+            >
+              下载HTML代码
+            </Button>
+          </Box>
+        )}
+      </Box>
       <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={()=>setSnackbar({...snackbar,open:false})} message={snackbar.message} />
-    </Box>
+    </>
   );
 } 

@@ -1,0 +1,177 @@
+/* 全局样式 */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #f0f8f0 0%, #e8f5e8 100%);
+  min-height: 100vh;
+}
+
+:root {
+  --theme-color: #769164;
+}
+body[data-theme-color] {
+  --theme-color: attr(data-theme-color color);
+}
+
+/* 玻璃特效对话框样式，简洁半透明风格 */
+.MuiPaper-root {
+  position: relative;
+  background: rgba(255, 255, 255, 0.18) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1.5px solid var(--theme-color) !important;
+  border-radius: 2rem !important;
+  box-shadow: 0 8px 32px rgba(118, 145, 100, 0.10), 0 4px 20px rgba(0,0,0,0.08) !important;
+  overflow: hidden;
+  z-index: 1;
+}
+.MuiPaper-root::after {
+  display: none !important;
+}
+
+/* 卡片内容深色字体，提升对比度 */
+.MuiPaper-root, .MuiPaper-root * {
+  color: #222 !important;
+}
+
+/* 预览容器样式 */
+.preview-container {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* 确保按钮和输入框在深色背景上清晰可见 */
+.MuiButton-root {
+  position: relative;
+  z-index: 10;
+}
+
+.MuiTextField-root {
+  position: relative;
+  z-index: 10;
+}
+
+.MuiFormControl-root {
+  position: relative;
+  z-index: 10;
+}
+
+/* 多弥散圆呼吸漂浮背景动画，主题色为竹绿色 */
+#breath-bg {
+  position: fixed;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  overflow: hidden;
+}
+.breath-circle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.32;
+  filter: blur(60px);
+  animation: breath-move 12s ease-in-out infinite alternate;
+  background: radial-gradient(circle at 50% 50%, #769164 0%, #e8f5e8 80%, transparent 100%);
+}
+.breath-circle:nth-child(1) {
+  width: 38vw; height: 38vw;
+  left: 10vw; top: 12vh;
+  animation-delay: 0s;
+}
+.breath-circle:nth-child(2) {
+  width: 32vw; height: 32vw;
+  left: 55vw; top: 8vh;
+  animation-delay: 2s;
+}
+.breath-circle:nth-child(3) {
+  width: 28vw; height: 28vw;
+  left: 20vw; top: 60vh;
+  animation-delay: 4s;
+}
+.breath-circle:nth-child(4) {
+  width: 36vw; height: 36vw;
+  left: 60vw; top: 55vh;
+  animation-delay: 6s;
+}
+@keyframes breath-move {
+  0%   { transform: scale(1)   translateY(0px); opacity: 0.32; }
+  50%  { transform: scale(1.18) translateY(-30px); opacity: 0.38; }
+  100% { transform: scale(1)   translateY(0px); opacity: 0.32; }
+}
+
+/* 保证主内容z-index高于背景动画 */
+body > div[style*='z-index: 1'] {
+  position: relative;
+  z-index: 1;
+}
+
+/* 1. 标题字体无发光/阴影，锐利清晰 */
+h1, h2, h3, .MuiTypography-h5, .MuiTypography-h4, .MuiTypography-h3, .MuiTypography-h2, .MuiTypography-h1 {
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+/* 2. 弥散圆全部自由移动（动画逻辑在BreathBg.tsx已实现，CSS无需更改） */
+
+/* 3. 液体玻璃高光和折射感增强 */
+.MuiPaper-root::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(255,255,255,0.10);
+  border-radius: 2rem;
+  /* 更强的液体高光和折射感 */
+  backdrop-filter: blur(2.2px);
+  box-shadow:
+    inset -12px -10px 0px -11px rgba(255,255,255,0.98),
+    inset 0px -12px 0px -8px rgba(255,255,255,0.90),
+    0 0 32px 8px rgba(255,255,255,0.10);
+  opacity: 0.70;
+  z-index: 0;
+  filter: blur(1.6px) drop-shadow(10px 4px 6px #b7cbb0) brightness(1.16);
+  pointer-events: none;
+  /* 多层渐变模拟液体高光和折射 */
+  background-image:
+    linear-gradient(120deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.06) 60%, rgba(255,255,255,0.22) 100%),
+    radial-gradient(circle at 65% 18%, rgba(255,255,255,0.22) 0%, transparent 60%),
+    radial-gradient(circle at 30% 85%, rgba(255,255,255,0.13) 0%, transparent 70%),
+    radial-gradient(ellipse at 80% 60%, rgba(255,255,255,0.18) 0%, transparent 80%),
+    radial-gradient(ellipse at 20% 30%, rgba(255,255,255,0.10) 0%, transparent 80%);
+}
+
+/* 主题色适配所有主色元素 */
+.MuiPaper-root {
+  border: 1.5px solid var(--theme-color) !important;
+}
+.MuiSelect-root, .MuiInput-underline:after, .MuiOutlinedInput-notchedOutline {
+  border-color: var(--theme-color) !important;
+}
+.MuiSelect-icon, .MuiSvgIcon-root, .MuiInputLabel-root {
+  color: var(--theme-color) !important;
+}
+.Mui-selected, .MuiMenuItem-root.Mui-selected {
+  background: color-mix(in srgb, var(--theme-color) 12%, transparent) !important;
+  color: var(--theme-color) !important;
+}
+.MuiMenuItem-root:hover {
+  background: color-mix(in srgb, var(--theme-color) 8%, transparent) !important;
+  color: var(--theme-color) !important;
+}
+
+/* 下拉菜单弹窗样式：更高不透明度，圆角与输入框一致 */
+.MuiPaper-root.MuiPopover-paper {
+  background: rgba(255,255,255,0.92) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 8px 32px rgba(118, 145, 100, 0.10), 0 4px 20px rgba(0,0,0,0.08) !important;
+} 
