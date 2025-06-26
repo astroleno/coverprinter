@@ -91,11 +91,16 @@ export default function Home() {
   const testResultRef = useRef<HTMLDivElement>(null);
   // 新增：prompt模板内容状态
   const [promptTemplates, setPromptTemplates] = useState<Record<string, string>>({});
-  // 新增：生成结果折叠状态
+  // 新增：生成结果折叠状态，默认折叠
   const [resultCollapsed, setResultCollapsed] = useState(true);
+  // 新增：封面预览折叠状态，互不影响
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
   // 在组件内增加snackbar状态
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const showSnackbar = (msg, severity = 'info') => setSnackbar({ open: true, message: msg, severity });
+  // 新增：LLM结果粘贴状态
+  const [llmResult, setLlmResult] = useState("");
+  const [llmResultCollapsed, setLlmResultCollapsed] = useState(true);
 
   // 动态输入项配置
   const inputConfig = {
@@ -309,10 +314,13 @@ export default function Home() {
 
   // 生成按钮：真实API流式输出
   const handleGenerate = async () => {
+    // 通知弥散圆加速
+    window.dispatchEvent(new CustomEvent('coverprinter-loading', { detail: true }));
     setLoading(true);
     setResult("");
     setHtmlPreview("");
     setResultCollapsed(false);
+    setPreviewCollapsed(false);
     try {
       const url = proxyUrl || "https://www.dmxapi.com/v1/chat/completions";
       const modelName = isCustomModel ? customModel : model;
@@ -352,23 +360,10 @@ export default function Home() {
           setResult(resultText);
         }
       }
-      setLoading(false);
-      // 生成完成后播放提示音
-      try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = 'triangle';
-        o.frequency.value = 880; // 清脆
-        g.gain.value = 0.08; // 响度不大
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.start();
-        o.stop(ctx.currentTime + 0.18);
-        o.onended = () => ctx.close();
-      } catch (e) {
-        // 忽略音频错误
-      }
+      // 生成后自动展开生成结果卡片
+      setResultCollapsed(false);
+      // 生成后自动展开封面预览
+      setPreviewCollapsed(false);
     } catch (e: any) {
       if (e?.name === "TypeError") {
         showSnackbar("网络错误或CORS跨域问题，或API地址/Key错误");
@@ -376,6 +371,9 @@ export default function Home() {
         showSnackbar("生成失败：" + (e?.message || "未知错误"));
       }
       setLoading(false);
+    } finally {
+      // 恢复弥散圆速度
+      window.dispatchEvent(new CustomEvent('coverprinter-loading', { detail: false }));
     }
   };
 
@@ -466,6 +464,35 @@ export default function Home() {
       setStyle(styleList[0].name);
     }
   }, [styleList]);
+
+  // 新增：一键复制完整prompt
+  const handleCopyPrompt = () => {
+    const fullPrompt = buildPrompt();
+    navigator.clipboard.writeText(fullPrompt);
+    showSnackbar('完整Prompt已复制到剪贴板');
+  };
+
+  // 新增：解析LLM结果并提取HTML
+  const handleParseLlmResult = () => {
+    if (!llmResult.trim()) {
+      showSnackbar('请先粘贴LLM返回结果', 'warning');
+      return;
+    }
+    
+    try {
+      // 尝试提取HTML代码
+      const html = extractHtml(llmResult);
+      if (html) {
+        setHtmlPreview(html);
+        showSnackbar('HTML解析成功，已生成预览');
+      } else {
+        showSnackbar('未找到有效的HTML代码', 'error');
+      }
+    } catch (error) {
+      console.error('解析LLM结果失败:', error);
+      showSnackbar('解析失败，请检查结果格式', 'error');
+    }
+  };
 
   return (
     <>
@@ -630,6 +657,19 @@ export default function Home() {
             >
               {loading ? <CircularProgress size={20} sx={{ mr: 1, color: '#111' }} /> : null}生成
             </Button>
+            {/* 新增：复制Prompt按钮 */}
+            <Button
+              variant="outlined"
+              onClick={handleCopyPrompt}
+              sx={{
+                mt: 1,
+                color: '#769164',
+                borderColor: '#769164',
+                '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' }
+              }}
+            >
+              复制Prompt
+            </Button>
           </Box>
         </Paper>
 
@@ -642,68 +682,50 @@ export default function Home() {
             </IconButton>
           </Box>
           <Collapse in={!resultCollapsed} timeout="auto" unmountOnExit>
-            <Box sx={{ p: 2, background: '#fff' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <Typography variant="body2" sx={{ flex: 1, whiteSpace: 'pre-wrap', fontSize: 16 }}>{result}</Typography>
-                <IconButton size="small" onClick={() => {navigator.clipboard.writeText(result); showSnackbar('已复制');}} sx={{ color: '#769164' }}><ContentCopyIcon fontSize="small" /></IconButton>
-              </Box>
+            <Box sx={{ p: 2, background: 'rgba(240,248,240,0.85)', borderRadius: 2, minHeight: 80, display: 'flex', alignItems: 'center' }}>
+              <Typography variant="body2" sx={{ flex: 1, whiteSpace: 'pre-wrap', fontSize: 16 }}>{result}</Typography>
+              <IconButton size="small" onClick={() => {navigator.clipboard.writeText(result); showSnackbar('已复制');}} sx={{ color: '#769164' }}><ContentCopyIcon fontSize="small" /></IconButton>
             </Box>
           </Collapse>
         </Paper>
 
-        {/* 预览卡片 */}
-        {htmlPreview && (
-          <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>封面预览</Typography>
+        {/* 封面预览卡片：始终显示，标题左上角，箭头右侧，两者居中对齐 */}
+        <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 0 }}>封面预览</Typography>
+            <IconButton size="small" onClick={() => setPreviewCollapsed(!previewCollapsed)} sx={{ color: '#769164', ml: 1 }}>
+              {previewCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+            </IconButton>
+          </Box>
+          {/* 预览区：未生成时显示提示，生成后可折叠，折叠时都不显示 */}
+          <Collapse in={!previewCollapsed} timeout="auto" unmountOnExit>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {/* 预览容器 */}
-              <Box 
-                ref={previewRef}
-                data-preview="true"
-                className="preview-container"
-                sx={{ 
-                  minHeight: 200, 
-                  border: '1px solid #e0e0e0',
-                  borderRadius: 1,
-                  overflow: 'hidden'
-                }}
-                dangerouslySetInnerHTML={{ __html: htmlPreview }}
-              />
-              {/* 下载按钮组 */}
-              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-                <Button 
-                  variant="outlined" 
-                  onClick={handleDownloadHtml} 
+              {htmlPreview ? (
+                <Box 
+                  ref={previewRef}
+                  data-preview="true"
+                  className="preview-container"
                   sx={{ 
-                    color: '#769164', 
-                    borderColor: '#769164', 
-                    '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' } 
+                    minHeight: 200, 
+                    border: '1px solid #e0e0e0',
+                    borderRadius: 1,
+                    overflow: 'hidden'
                   }}
-                >
-                  下载HTML代码
-                </Button>
-                <Button 
-                  variant="outlined" 
-                  onClick={handleDownloadPng} 
-                  sx={{ 
-                    color: '#769164', 
-                    borderColor: '#769164', 
-                    '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' } 
-                  }}
-                >
-                  下载PNG图片
-                </Button>
-              </Box>
+                  dangerouslySetInnerHTML={{ __html: htmlPreview }}
+                />
+              ) : (
+                <Box sx={{ minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#aaa', fontSize: 18 }}>
+                  暂无封面预览，请先生成
+                </Box>
+              )}
             </Box>
-          </Paper>
-        )}
-        
-        {/* 下载HTML代码按钮 - 独立放置 */}
-        {result && !htmlPreview && (
-          <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+          </Collapse>
+          {/* 下载按钮组始终显示，不受折叠影响 */}
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mt: 2 }}>
             <Button 
               variant="outlined" 
               onClick={handleDownloadHtml} 
+              disabled={!htmlPreview}
               sx={{ 
                 color: '#769164', 
                 borderColor: '#769164', 
@@ -712,8 +734,72 @@ export default function Home() {
             >
               下载HTML代码
             </Button>
+            <Button 
+              variant="outlined" 
+              onClick={handleDownloadPng} 
+              disabled={!htmlPreview}
+              sx={{ 
+                color: '#769164', 
+                borderColor: '#769164', 
+                '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' } 
+              }}
+            >
+              下载PNG图片
+            </Button>
           </Box>
-        )}
+        </Paper>
+
+        {/* 新增：LLM结果粘贴卡片（风格统一，标题和输入框左对齐） */}
+        <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, pl: 1, pr: 1 }}>
+            <Typography variant="h5" sx={{ fontWeight: 600, mb: 0 }}>LLM结果解析</Typography>
+            <IconButton size="small" onClick={() => setLlmResultCollapsed(!llmResultCollapsed)} sx={{ color: '#769164' }}>
+              {llmResultCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+            </IconButton>
+          </Box>
+          <Collapse in={!llmResultCollapsed} timeout="auto" unmountOnExit>
+            <Box sx={{ pl: 1, pr: 1 }}>
+              <TextField
+                label="粘贴LLM结果"
+                placeholder="请粘贴LLM返回的完整结果..."
+                value={llmResult}
+                onChange={(e) => setLlmResult(e.target.value)}
+                fullWidth
+                multiline
+                minRows={4}
+                maxRows={8}
+                size="small"
+                sx={{ mt: 2, mb: 2 }}
+              />
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <Button
+                  variant="contained"
+                  onClick={handleParseLlmResult}
+                  disabled={!llmResult.trim()}
+                  sx={{
+                    bgcolor: '#769164',
+                    color: '#111',
+                    fontWeight: 'bold',
+                    '&:hover': { bgcolor: '#5a7a4a', filter: 'brightness(0.92)' }
+                  }}
+                >
+                  解析并下载
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setLlmResult("")}
+                  sx={{
+                    color: '#769164',
+                    borderColor: '#769164',
+                    '&:hover': { borderColor: '#5a7a4a', color: '#5a7a4a' }
+                  }}
+                >
+                  清空
+                </Button>
+              </Box>
+            </Box>
+          </Collapse>
+        </Paper>
       </Box>
       <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={()=>setSnackbar({...snackbar,open:false})} message={snackbar.message} />
     </>
