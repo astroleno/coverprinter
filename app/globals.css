@@ -193,4 +193,14 @@ h1, h2, h3, .MuiTypography-h5, .MuiTypography-h4, .MuiTypography-h3, .MuiTypogra
   font-size: 14px !important;
   top: -6px !important;
   left: 8px !important;
+}
+
+/* 统一所有下拉菜单和卡片折叠箭头样式：竹绿色、20px、右对齐 */
+.MuiSelect-icon, .MuiSvgIcon-root, .MuiInputAdornment-root {
+  color: #769164 !important;
+  font-size: 20px !important;
+  right: 12px !important;
+  position: absolute !important;
+  top: 50%;
+  transform: translateY(-50%);
 } 

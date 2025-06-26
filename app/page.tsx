@@ -494,6 +494,23 @@ export default function Home() {
     }
   };
 
+  // 统一下拉菜单箭头组件
+  const DropdownArrow = (props: any) => (
+    <ExpandMoreIcon
+      {...props}
+      sx={{
+        color: '#769164',
+        fontSize: 24,
+        position: 'absolute',
+        right: 12,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        pointerEvents: 'none',
+        ...props.sx
+      }}
+    />
+  );
+
   return (
     <>
       {/* 背景动画，传递主题色 */}
@@ -513,13 +530,14 @@ export default function Home() {
                   const val = e.target.value;
                   if (val === "custom") {
                     setIsCustomProxyUrl(true);
-                    // 若已有自定义值则用已有，否则清空
                     setProxyUrl(customProxyUrl || "");
                   } else {
                     setIsCustomProxyUrl(false);
                     setProxyUrl(val);
                   }
                 }}
+                IconComponent={DropdownArrow}
+                sx={{ '& .MuiSelect-icon': { top: '50%', transform: 'translateY(-50%)', right: 12, position: 'absolute' } }}
               >
                 {proxyUrlOptions.map(option => (
                   <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
@@ -545,7 +563,7 @@ export default function Home() {
             {/* 模型名称下拉框 */}
             <FormControl fullWidth size="small">
               <InputLabel>模型名称</InputLabel>
-              <Select value={isCustomModel ? "custom" : model} label="模型名称" onChange={(e) => handleModelChange(e.target.value)}>
+              <Select value={isCustomModel ? "custom" : model} label="模型名称" onChange={(e) => handleModelChange(e.target.value)} IconComponent={DropdownArrow} sx={{ '& .MuiSelect-icon': { top: '50%', transform: 'translateY(-50%)', right: 12, position: 'absolute' } }}>
                 {modelOptions.map(option => (
                   <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
                 ))}
@@ -579,7 +597,7 @@ export default function Home() {
             {/* 选择模板 */}
             <FormControl fullWidth size="small">
               <InputLabel>选择模板</InputLabel>
-              <Select value={prompt} label="选择模板" onChange={(e) => setPrompt(e.target.value)}>
+              <Select value={prompt} label="选择模板" onChange={(e) => setPrompt(e.target.value)} IconComponent={DropdownArrow} sx={{ '& .MuiSelect-icon': { top: '50%', transform: 'translateY(-50%)', right: 12, position: 'absolute' } }}>
                 {promptList.map(p => (
                   <MenuItem key={p.key} value={p.key}>{p.label}</MenuItem>
                 ))}
@@ -594,6 +612,8 @@ export default function Home() {
                 onChange={(e) => setStyle(e.target.value)}
                 disabled={styleList.length === 0}
                 displayEmpty
+                IconComponent={DropdownArrow}
+                sx={{ '& .MuiSelect-icon': { top: '50%', transform: 'translateY(-50%)', right: 12, position: 'absolute' } }}
               >
                 {styleList.length === 0 ? (
                   <MenuItem value="" disabled style={{ color: '#aaa' }}>
@@ -674,11 +694,11 @@ export default function Home() {
         </Paper>
 
         {/* 生成结果卡片 */}
-        <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
+        <Paper sx={{ p: 3, pr: 1.5, mb: 3, background: '#fff' }} elevation={2}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="h5" sx={{ fontWeight: 600 }}>生成结果</Typography>
-            <IconButton size="small" onClick={() => setResultCollapsed(!resultCollapsed)} sx={{ color: '#769164' }}>
-              {resultCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+            <IconButton size="small" onClick={() => setResultCollapsed(!resultCollapsed)} sx={{ color: '#769164', mr: 0 }}>
+              {resultCollapsed ? <ExpandMoreIcon fontSize="medium" /> : <ExpandLessIcon fontSize="medium" />}
             </IconButton>
           </Box>
           <Collapse in={!resultCollapsed} timeout="auto" unmountOnExit>
@@ -689,15 +709,14 @@ export default function Home() {
           </Collapse>
         </Paper>
 
-        {/* 封面预览卡片：始终显示，标题左上角，箭头右侧，两者居中对齐 */}
-        <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 0 }}>封面预览</Typography>
-            <IconButton size="small" onClick={() => setPreviewCollapsed(!previewCollapsed)} sx={{ color: '#769164', ml: 1 }}>
-              {previewCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+        {/* 封面预览卡片 */}
+        <Paper sx={{ p: 3, pr: 1.5, mb: 3, background: '#fff' }} elevation={2}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, pl: 1, pr: 0 }}>
+            <Typography variant="h5" sx={{ fontWeight: 600, mb: 0 }}>封面预览</Typography>
+            <IconButton size="small" onClick={() => setPreviewCollapsed(!previewCollapsed)} sx={{ color: '#769164', mr: 0 }}>
+              {previewCollapsed ? <ExpandMoreIcon fontSize="medium" /> : <ExpandLessIcon fontSize="medium" />}
             </IconButton>
           </Box>
-          {/* 预览区：未生成时显示提示，生成后可折叠，折叠时都不显示 */}
           <Collapse in={!previewCollapsed} timeout="auto" unmountOnExit>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {htmlPreview ? (
@@ -749,12 +768,12 @@ export default function Home() {
           </Box>
         </Paper>
 
-        {/* 新增：LLM结果粘贴卡片（风格统一，标题和输入框左对齐） */}
-        <Paper sx={{ p: 3, mb: 3, background: '#fff' }} elevation={2}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, pl: 1, pr: 1 }}>
+        {/* LLM结果解析卡片 */}
+        <Paper sx={{ p: 3, pr: 1.5, mb: 3, background: '#fff' }} elevation={2}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, pl: 1, pr: 0 }}>
             <Typography variant="h5" sx={{ fontWeight: 600, mb: 0 }}>LLM结果解析</Typography>
-            <IconButton size="small" onClick={() => setLlmResultCollapsed(!llmResultCollapsed)} sx={{ color: '#769164' }}>
-              {llmResultCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+            <IconButton size="small" onClick={() => setLlmResultCollapsed(!llmResultCollapsed)} sx={{ color: '#769164', mr: 0 }}>
+              {llmResultCollapsed ? <ExpandMoreIcon fontSize="medium" /> : <ExpandLessIcon fontSize="medium" />}
             </IconButton>
           </Box>
           <Collapse in={!llmResultCollapsed} timeout="auto" unmountOnExit>
